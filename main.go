@@ -37,13 +37,16 @@ func main() {
 func command() *cli.Command {
 	return &cli.Command{
 		Name:  "maccy-cli",
-		Usage: "List Maccy clipboard history (read-only)",
+		Usage: "Manage Maccy clipboard history",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "db", Usage: "Path to Maccy's Storage.sqlite"},
 			&cli.IntFlag{Name: "limit", Aliases: []string{"n"}, Value: 20, Usage: "Maximum entries (0 for all)"},
 			&cli.BoolFlag{Name: "json", Usage: "Output JSON, including full plain-text content"},
 		},
 		Commands: []*cli.Command{
+			{Name: "gopass-clear-handler", Usage: "Remove passwords matching an Argon2id hash read from stdin", Flags: []cli.Flag{
+				&cli.IntFlag{Name: "limit", Aliases: []string{"n"}, Value: 10, Usage: "Newest entries to check (must be positive)"},
+			}, Action: cleanupAction},
 			{Name: "list", Usage: "List clipboard history", Action: listAction},
 			{Name: "pick", Usage: "Select plain text and copy it to the clipboard", Flags: []cli.Flag{
 				&cli.StringFlag{Name: "tool", Aliases: []string{"t"}, Value: "fzf", Usage: "Selector executable (fzf-compatible line selection)"},
@@ -66,15 +69,22 @@ func loadCommand(ctx context.Context, cmd *cli.Command) ([]item, error) {
 	if cmd.Int("limit") < 0 {
 		return nil, fmt.Errorf("limit must be nonnegative")
 	}
-	path := cmd.String("db")
+	path, err := databasePath(cmd.String("db"))
+	if err != nil {
+		return nil, err
+	}
+	return load(ctx, path, cmd.Int("limit"))
+}
+
+func databasePath(path string) (string, error) {
 	if path == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		path = filepath.Join(home, "Library/Containers/org.p0deje.Maccy/Data/Library/Application Support/Maccy/Storage.sqlite")
 	}
-	return load(ctx, path, cmd.Int("limit"))
+	return path, nil
 }
 
 func pickAction(ctx context.Context, cmd *cli.Command) error {
